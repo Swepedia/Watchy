@@ -4,7 +4,10 @@ WatchyRTC Watchy::RTC;
 GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT> Watchy::display(GxEPD2_154_D67(DISPLAY_CS, DISPLAY_DC, DISPLAY_RES, DISPLAY_BUSY));
 
 RTC_DATA_ATTR int guiState;
+RTC_DATA_ATTR tmElements_t clockStart;
+RTC_DATA_ATTR hw_timer_t* clockTimer; //might not work when entering deep sleep
 RTC_DATA_ATTR int menuIndex;
+RTC_DATA_ATTR int clockMenuIndex;
 RTC_DATA_ATTR BMA423 sensor;
 RTC_DATA_ATTR bool WIFI_CONFIGURED;
 RTC_DATA_ATTR bool BLE_CONFIGURED;
@@ -97,7 +100,22 @@ void Watchy::handleButtonPress(){
       }
     }else if(guiState == FW_UPDATE_STATE){
       updateFWBegin();
-    }
+    }else if(guiState == CLOCK_MENU_STATE){
+	  switch(clockMenuIndex)
+	  {
+		case 0:
+		  showStopwatch(clockStart);
+		  break;
+		case 1:
+		  showTimer();
+		  break;
+		case 2:
+		  showAlarm();
+		  break;
+		default:
+		  break;
+	  }
+	}
   }
   //Back Button
   else if (wakeupBit & BACK_BTN_MASK){
@@ -110,7 +128,16 @@ void Watchy::handleButtonPress(){
         showMenu(menuIndex, false);//exit to menu if already in app
     }else if(guiState == WATCHFACE_STATE){
         return;
-    }
+    }else if(guiState == CLOCK_MENU_STATE){
+		RTC.read(currentTime);
+		showWatchFace(false);
+	}else if(guiState == STOPWATCH_PAUSE_STATE || guiState == STOPWATCH_GO_STATE){
+		showClockMenu(clockMenuIndex, false);
+	}else if(guiState == TIMER_STATE){
+		showClockMenu(clockMenuIndex, false);
+	}else if(guiState == ALARM_STATE){
+		showClockMenu(clockMenuIndex, false);
+	}
   }
   //Up Button
   else if (wakeupBit & UP_BTN_MASK){
@@ -121,8 +148,18 @@ void Watchy::handleButtonPress(){
       }
       showMenu(menuIndex, true);
     }else if(guiState == WATCHFACE_STATE){
-        return;
-    }
+      showClockMenu(clockMenuIndex, true);
+    }else if(guiState == CLOCK_MENU_STATE){
+	  clockMenuIndex--;
+	  if(clockMenuIndex < 0){
+		clockMenuIndex = CLOCK_MENU_LENGTH - 1;
+	  }
+	  showClockMenu(clockMenuIndex, true);
+	}else if(guiState == STOPWATCH_PAUSE_STATE){
+		updateStopwatchBegin(true); //toggle stopwatch
+	}else if(guiState == STOPWATCH_GO_STATE){
+		updateStopwatchBegin(false); //toggle stopwatch
+	}
   }
   //Down Button
   else if (wakeupBit & DOWN_BTN_MASK){
@@ -134,7 +171,13 @@ void Watchy::handleButtonPress(){
       showMenu(menuIndex, true);
     }else if(guiState == WATCHFACE_STATE){
         return;
-    }
+    }else if(guiState == CLOCK_MENU_STATE){
+	  clockMenuIndex++;
+	  if(clockMenuIndex > CLOCK_MENU_LENGTH - 1){
+		clockMenuIndex = 0;
+	  }
+	  showClockMenu(clockMenuIndex, true);
+	}
   }
 
   /***************** fast menu *****************/
@@ -179,7 +222,22 @@ void Watchy::handleButtonPress(){
                 }
             }else if(guiState == FW_UPDATE_STATE){
                 updateFWBegin();
-            }
+            }else if(guiState == CLOCK_MENU_STATE){
+				switch(clockMenuIndex)
+				{
+					case 0:
+					showStopwatch(clockStart);
+					break;
+					case 1:
+					showTimer();
+					break;
+					case 2:
+					showAlarm();
+					break;
+					default:
+					break;
+				}
+			}
           }else if(digitalRead(BACK_BTN_PIN) == 1){
             lastTimeout = millis();
             if(guiState == MAIN_MENU_STATE){//exit to watch face if already in menu
@@ -190,7 +248,16 @@ void Watchy::handleButtonPress(){
             showMenu(menuIndex, false);//exit to menu if already in app
             }else if(guiState == FW_UPDATE_STATE){
             showMenu(menuIndex, false);//exit to menu if already in app
-            }
+            }else if(guiState == CLOCK_MENU_STATE){
+			RTC.read(currentTime);
+			showWatchFace(false);
+			}else if(guiState == STOPWATCH_PAUSE_STATE || guiState == STOPWATCH_GO_STATE){
+			showClockMenu(clockMenuIndex, false);
+			}else if(guiState == TIMER_STATE){
+			showClockMenu(clockMenuIndex, false);
+			}else if(guiState == ALARM_STATE){
+			showClockMenu(clockMenuIndex, false);
+			}
           }else if(digitalRead(UP_BTN_PIN) == 1){
             lastTimeout = millis();
             if(guiState == MAIN_MENU_STATE){//increment menu index
@@ -199,7 +266,19 @@ void Watchy::handleButtonPress(){
                 menuIndex = MENU_LENGTH - 1;
             }
             showFastMenu(menuIndex);
-            }
+            }else if(guiState == WATCHFACE_STATE){
+				showClockMenu(clockMenuIndex, true);
+			}else if(guiState == CLOCK_MENU_STATE){
+				clockMenuIndex--;
+				if(clockMenuIndex < 0){
+					clockMenuIndex = CLOCK_MENU_LENGTH - 1;
+				}
+				showClockMenu(clockMenuIndex, true);
+			}else if(guiState == STOPWATCH_PAUSE_STATE){
+				updateStopwatchBegin(true); //toggle stopwatch
+			}else if(guiState == STOPWATCH_GO_STATE){
+				updateStopwatchBegin(false); //toggle stopwatch
+			}
           }else if(digitalRead(DOWN_BTN_PIN) == 1){
             lastTimeout = millis();
             if(guiState == MAIN_MENU_STATE){//decrement menu index
@@ -209,6 +288,13 @@ void Watchy::handleButtonPress(){
             }
             showFastMenu(menuIndex);
             }
+			else if(guiState == CLOCK_MENU_STATE){
+			clockMenuIndex++;
+			if(clockMenuIndex > CLOCK_MENU_LENGTH - 1){
+				clockMenuIndex = 0;
+			}
+			showClockMenu(clockMenuIndex, true);
+			}
           }
       }
   }
@@ -241,6 +327,35 @@ void Watchy::showMenu(byte menuIndex, bool partialRefresh){
     display.display(partialRefresh);
 
     guiState = MAIN_MENU_STATE;
+}
+
+void Watchy::showClockMenu(byte menuIndex, bool partialRefresh){
+    display.setFullWindow();
+    display.fillScreen(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold9pt7b);
+
+    int16_t  x1, y1;
+    uint16_t w, h;
+    int16_t yPos;
+
+    const char *menuItems[] = {"Stopwatch", "Timer", "Alarm"};
+    for(int i=0; i<CLOCK_MENU_LENGTH; i++){
+    yPos = MENU_HEIGHT+(MENU_HEIGHT*i);
+    display.setCursor(0, yPos);
+    if(i == menuIndex){
+        display.getTextBounds(menuItems[i], 0, yPos, &x1, &y1, &w, &h);
+        display.fillRect(x1-1, y1-10, 200, h+15, GxEPD_WHITE);
+        display.setTextColor(GxEPD_BLACK);
+        display.println(menuItems[i]);
+    }else{
+        display.setTextColor(GxEPD_WHITE);
+        display.println(menuItems[i]);
+    }
+    }
+
+    display.display(partialRefresh);
+
+    guiState = CLOCK_MENU_STATE;
 }
 
 void Watchy::showFastMenu(byte menuIndex){
@@ -564,6 +679,53 @@ void Watchy::drawWatchFace(){
         display.print("0");
     }
     display.println(currentTime.Minute);
+}
+
+void Watchy::showStopwatch(tmElements_t elapsed){
+	display.setFullWindow();
+	display.fillScreen(GxEPD_BLACK);
+	display.setFont(&FreeMonoBold9pt7b);
+	display.setCursor(50, 10);
+	display.print("Stopwatch");
+	display.setCursor(50, 100);
+	if(guiState == STOPWATCH_GO_STATE){
+		display.print("Go!");
+	}else{
+		display.print(elapsed.Hour);
+		display.print(".");
+		display.print(elapsed.Minute % 60);
+		display.print(".");
+		display.print(elapsed.Second);
+		guiState = STOPWATCH_PAUSE_STATE;
+	}
+	display.display(false); // full refresh
+}
+
+void Watchy::updateStopwatchBegin(bool go){
+	if(go){
+		RTC.read(clockStart);
+		guiState = STOPWATCH_GO_STATE;
+		showStopwatch(clockStart);
+	}else{
+		tmElements_t tempTime;
+		RTC.read(tempTime);
+		guiState = STOPWATCH_PAUSE_STATE;
+		tmElements_t elapsed = {tempTime.Second - clockStart.Second,
+								tempTime.Minute - clockStart.Minute,
+								tempTime.Hour - clockStart.Hour};
+		showStopwatch(elapsed);
+		//showStopwatch(clockStart);
+	}
+}
+
+//TODO:
+void Watchy::showTimer(){
+	return;
+}
+
+//TODO:
+void Watchy::showAlarm(){
+	return;
 }
 
 weatherData Watchy::getWeatherData(){

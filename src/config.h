@@ -14,8 +14,14 @@
 #define MAIN_MENU_STATE 0
 #define APP_STATE 1
 #define FW_UPDATE_STATE 2
+#define CLOCK_MENU_STATE 3
+#define STOPWATCH_PAUSE_STATE 4
+#define STOPWATCH_GO_STATE 5
+#define TIMER_STATE 6
+#define ALARM_STATE 7
 #define MENU_HEIGHT 25
 #define MENU_LENGTH 7
+#define CLOCK_MENU_LENGTH 3
 //set time
 #define SET_HOUR 0
 #define SET_MINUTE 1

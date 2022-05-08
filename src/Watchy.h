@@ -43,6 +43,7 @@ class Watchy {
         static GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT> display;
         tmElements_t currentTime;
         watchySettings settings;
+		//tmElements_t clockStart;
     public:
         explicit Watchy(const watchySettings& s) : settings(s){} //constructor
         void init(String datetime = "");
@@ -59,6 +60,11 @@ class Watchy {
         void showAccelerometer();
         void showUpdateFW();
         void showSyncNTP();
+		void showClockMenu(byte menuIndex, bool partialRefresh);
+		void showFastClockMenu(byte menuIndex);
+		void showStopwatch(tmElements_t elapsed);
+		void showTimer();
+		void showAlarm();
         bool syncNTP();
         bool syncNTP(long gmt, int dst, String ntpServer);
         void setTime();
@@ -67,6 +73,7 @@ class Watchy {
         weatherData getWeatherData();
         weatherData getWeatherData(String cityID, String units, String lang, String url, String apiKey, uint8_t updateInterval);
         void updateFWBegin();
+		void updateStopwatchBegin(bool go);
 
         void showWatchFace(bool partialRefresh);
         virtual void drawWatchFace(); //override this method for different watch faces
